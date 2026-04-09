@@ -1,0 +1,31 @@
+# Virtual environment
+
+.venv/
+
+# Environment variables (VERY IMPORTANT)
+
+.env
+
+# Python cache
+
+**pycache**/
+_.pyc
+_.pyo
+
+# Git
+
+.git
+.gitignore
+
+# Logs
+
+logs/
+
+# VS Code
+
+.vscode/
+
+# OS files
+
+.DS_Store
+Thumbs.db

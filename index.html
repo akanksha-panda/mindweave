@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+  <head>
+    <title>MindWeave Chat</title>
+    <style>
+      body {
+        font-family: Arial;
+        background: #f5f5f5;
+      }
+      #chat {
+        width: 500px;
+        height: 500px;
+        margin: 20px auto;
+        padding: 10px;
+        background: white;
+        overflow-y: auto;
+        border-radius: 10px;
+      }
+      .user {
+        color: blue;
+        margin: 5px 0;
+      }
+      .bot {
+        color: black;
+        margin: 5px 0;
+      }
+      #inputBox {
+        width: 400px;
+        padding: 10px;
+      }
+      #sendBtn {
+        padding: 10px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div style="text-align: center; margin-top: 20px;">
+      <h1 style="margin-bottom: 5px;">Chat with MindWeave</h1>
+      <p style="color: #777; font-size: 14px;">AI-powered mental wellness assistant</p>
+    </div>
+    <div id="chat"></div>
+
+    <div style="text-align: center">
+      <input id="inputBox" placeholder="Type something..." />
+      <button id="sendBtn">Send</button>
+    </div>
+
+    <script>
+      const chat = document.getElementById("chat");
+      const input = document.getElementById("inputBox");
+
+      const SESSION_ID =
+        localStorage.getItem("session_id") || crypto.randomUUID();
+      localStorage.setItem("session_id", SESSION_ID);
+
+      async function sendMessage() {
+        const text = input.value;
+        if (!text) return;
+
+        chat.innerHTML += `<div class="user">You: ${text}</div>`;
+        input.value = "";
+
+        let botDiv = document.createElement("div");
+        botDiv.className = "bot";
+        botDiv.innerHTML = "Mindweave: ";
+        chat.appendChild(botDiv);
+
+        const response = await fetch("http://127.0.0.1:8001/chat_stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_input: text,
+            session_id: SESSION_ID,
+          }),
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (let line of lines) {
+            if (!line.startsWith("data: ")) continue;
+
+            let content = line.replace("data: ", "");
+
+            if (content === "[DONE]") {
+              if (buffer) {
+                botDiv.innerHTML += buffer;
+                buffer = "";
+              }
+              return;
+            }
+
+            if (content.startsWith("{")) {
+              const data = JSON.parse(content);
+
+              const state = { ...data.state };
+
+              // show nicely
+              const stateText = `
+        <div style="font-size:12px; color:#777; margin-top:5px;">
+        . Mood: ${state.mood} | 
+         Energy: ${state.energy} | 
+        . Distortion: ${state.distortion} | 
+         Sentiment: ${state.sentiment}<br>
+         Reward: ${data.reward} | 
+        . Agent: ${data.agent}
+        </div>
+        `;
+
+              botDiv.innerHTML += stateText;
+              console.log("State:", data.state);
+              continue;
+            }
+
+            if (!content.trim()) continue;
+
+            buffer += content;
+
+            // print only on natural boundaries
+            if (
+              content.endsWith(" ") ||
+              content.endsWith(".") ||
+              content.endsWith(",") ||
+              content.endsWith("?") ||
+              content.endsWith("!") ||
+              buffer.length > 30
+            ) {
+              botDiv.innerHTML += buffer;
+              buffer = "";
+              chat.scrollTop = chat.scrollHeight;
+            }
+          }
+        }
+      }
+
+      document.getElementById("sendBtn").onclick = sendMessage;
+      input.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") sendMessage();
+      });
+    </script>
+  </body>
+</html>

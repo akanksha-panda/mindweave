@@ -1,0 +1,20 @@
+[
+  {
+    "input": "I feel like a failure",
+    "response": "It sounds like you're going through quite an intense time right now and I want to assure you that having difficult moments doesn\u2019t mean failure; they simply show us where we are in our journey, which is perfectly okay. If it feels helpful for you at this moment, perhaps a short walk or some light stretching might help clear your mind? Remember, taking care of yourself isn't optional\u2014it's essential and I believe in your strength to get through tough times like these. How are you feeling after our conversation today?",
+    "score": 1.0,
+    "agent": "emotional"
+  },
+  {
+    "input": "I have no energy",
+    "response": "I can sense that you're going through an especially low point right now where everything feels heavier than usual and energy is hard to come by\u2014it really sounds like a tough day for you. Sometimes, our bodies react with physical tiredness when we\u2019re trying to cope emotionally or mentally. What if taking even the smallest step could help? Maybe just sipping on some water might be enough to make things feel a bit lighter at this moment and give your body something gentle to focus on besides everything else that's going on inside you.",
+    "score": 1.0,
+    "agent": "behavioral"
+  },
+  {
+    "input": "Nothing makes sense anymore",
+    "response": "\"I'm here alongside you during these times of confusion and feeling like things don\u2019t make sense. It sounds incredibly challenging when everything seems to be in a blurry haze for us, doesn't it? While I believe that finding clarity can often help ease this sensation over time, how do you feel about gently exploring some grounding techniques or perhaps writing down your thoughts and feelings as an exercise of self-reflection?\"",
+    "score": 0.9,
+    "agent": "cognitive"
+  }
+]

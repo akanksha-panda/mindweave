@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual env
+.venv/
+
+# Env variables (VERY IMPORTANT)
+.env
+
+# Logs
+logs/
+
+# Models (VERY IMPORTANT)
+models/*
+!models/ppo_mental_health_final.pt
+
+# VS Code
+.vscode/
+
+# Build files
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
