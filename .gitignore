@@ -7,7 +7,7 @@ __pycache__/
 .venv/
 
 # Env variables (VERY IMPORTANT)
-.env
+
 
 # Logs
 logs/
