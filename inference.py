@@ -7,85 +7,83 @@ from client import MindweaveEnv, MindweaveAction
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
-# Strict Configuration (Required by Validator)
-API_KEY = os.environ["API_KEY"]
-API_BASE_URL = os.environ["API_BASE_URL"]
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+# ==========================================
+# STRICT DEBUG CONFIG
+# ==========================================
+# No fallbacks. If any of these are missing, the script crashes immediately.
+API_KEY = os.environ["API_KEY"].strip()
+API_BASE_URL = os.environ["API_BASE_URL"].strip()
+MODEL_NAME = os.environ["MODEL_NAME"].strip() # <--- Force fail if not injected
 
-# Proxy-Only Client
 client = OpenAI(
     api_key=API_KEY,
-    base_url=API_BASE_URL
+    base_url=API_BASE_URL,
+    default_headers={"X-Requested-With": "Mindweave-Submission"}
 )
 
 def llm_echo(answer: str) -> str:
     response = client.chat.completions.create(
         model=MODEL_NAME,
-        messages=[{"role": "user", "content": f"Return ONLY this word:\n{answer}"}],
+        messages=[{"role": "user", "content": f"Return ONLY this word: {answer}"}],
         temperature=0,
         max_tokens=3,
     )
     return response.choices[0].message.content.strip().lower()
 
 def simple_policy(state, task):
+    # (Keeping your core logic the same)
     emotion = state.get("emotion")
     intent = state.get("intent")
     energy = state.get("energy", 1)
     distortion = state.get("distortion", 5)
-
-    if task == "emotion_classification":
-        return emotion or "neutral"
-    if task == "intent_detection":
-        return intent or "statement"
-    if energy == 0:
-        return "behavioral"
-    if distortion > 6:
-        return "cognitive"
+    if task == "emotion_classification": return emotion or "neutral"
+    if task == "intent_detection": return intent or "statement"
+    if energy == 0: return "behavioral"
+    if distortion > 6: return "cognitive"
     return "emotional"
 
 async def main():
     env = MindweaveEnv(base_url="http://localhost:8000")
-    print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
-
-    rewards = []
-    step_idx = 1
+    print(f"[START] Using Proxy: {API_BASE_URL} | Model: {MODEL_NAME}", flush=True)
 
     try:
         result = await env.reset()
         obs = result.observation
 
-        # Initial Proxy Ping
-        client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1
-        )
+        # 🔥 CRITICAL DEBUG PING
+        print(f"DEBUG: Attempting first proxy call to {API_BASE_URL}...", flush=True)
+        try:
+            ping = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1
+            )
+            print(f"DEBUG: Proxy response successful: {ping.id}", flush=True)
+        except Exception as api_err:
+            print(f"DEBUG: Proxy call FAILED. Error: {str(api_err)}", flush=True)
+            raise api_err # Re-raise to stop execution
+
+        step_idx = 1
+        rewards = []
 
         while not result.done:
             state = obs.state or {}
             task = obs.task
-            
             ppo_output = simple_policy(state, task)
+            
             action_text = llm_echo(ppo_output)
 
-            result = await env.step(
-                MindweaveAction(message=action_text, task=task)
-            )
+            result = await env.step(MindweaveAction(message=action_text, task=task))
+            rewards.append(float(result.reward))
 
-            reward = float(result.reward)
-            rewards.append(reward)
-
-            print(f"[STEP] step={step_idx} action={action_text} reward={reward:.2f} done={str(result.done).lower()} error=null", flush=True)
-            
+            print(f"[STEP] step={step_idx} action={action_text} reward={result.reward:.2f}", flush=True)
             obs = result.observation
             step_idx += 1
 
-        total_steps = step_idx - 1
-        score = sum(rewards) / total_steps if total_steps > 0 else 0.0
-        print(f"[END] success=true steps={total_steps} score={score:.2f} rewards={','.join(f'{r:.2f}' for r in rewards)}", flush=True)
+        print(f"[END] success=true score={sum(rewards)/(step_idx-1):.2f}", flush=True)
 
     except Exception as e:
-        print(f"[END] success=false steps={step_idx} score=0.00 rewards= error={str(e)}", flush=True)
+        print(f"[END] success=false error={str(e)}", flush=True)
     finally:
         await env.close()
 
