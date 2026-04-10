@@ -146,7 +146,7 @@ uv run python inference.py
 ## 💻 Live UI (Optional)
 
 1. Start UI Backend
-   python -m uv run uvicorn mindweave_env.server.main_ui:app --reload |
+   python -m uv run uvicorn mindweave_env.server.main_ui:app --reload 
 2. Open Frontend
 
 Open:
@@ -155,13 +155,13 @@ index.html file and go live(in vs code)
 
 Or run via Live Server:
 
-http://127.0.0.1:5500/index.html |
+http://127.0.0.1:5500/index.html 
 
 . Local LLM
 
 Install Ollama and run:
 
-ollama pull phi3 |
+ollama pull phi3 
 
 Used for chat UI only — not required for evaluation
 
