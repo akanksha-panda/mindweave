@@ -12,9 +12,9 @@ __pycache__/
 # Logs
 logs/
 
-# Models (VERY IMPORTANT)
-models/*
-!models/ppo_mental_health_final.pt
+# Model (VERY IMPORTANT)
+model/*
+!model/ppo_mental_health_final.pt
 
 # VS Code
 .vscode/

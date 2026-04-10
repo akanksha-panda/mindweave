@@ -14,7 +14,7 @@ from server.rl.ppo_model import PPOPolicy
 from server.llm.llm_handler import generate_response_stream
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Navigate up to the root folder to find the models directory
+# Navigate up to the root folder to find the model directory
 # Adjust this join based on your exact folder structure
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR)))
 
@@ -27,9 +27,9 @@ async def get_full_response(action, user_input, state):
 # . DYNAMIC PATH HANDLING
 MODEL_FILENAME = "ppo_mental_health_final.pt"
 possible_paths = [
-    os.path.join(PROJECT_ROOT, "models", MODEL_FILENAME),
+    os.path.join(PROJECT_ROOT, "model", MODEL_FILENAME),
     os.path.join(os.getcwd(), MODEL_FILENAME),
-    os.path.join(BASE_DIR, "..", "..", "models", MODEL_FILENAME)
+    os.path.join(BASE_DIR, "..", "..", "model", MODEL_FILENAME)
 ]
 
 MODEL_PATH = None

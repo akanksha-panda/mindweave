@@ -34,9 +34,9 @@ PACKAGE_DIR = os.path.dirname(BASE_DIR)
 ROOT_DIR = os.path.dirname(PACKAGE_DIR) 
 
 possible_paths = [
-    os.path.join(ROOT_DIR, "models", "ppo_mental_health_final.pt"),
-    os.path.join(PACKAGE_DIR, "models", "ppo_mental_health_final.pt"),
-    os.path.join(BASE_DIR, "models", "ppo_mental_health_final.pt")
+    os.path.join(ROOT_DIR, "model", "ppo_mental_health_final.pt"),
+    os.path.join(PACKAGE_DIR, "model", "ppo_mental_health_final.pt"),
+    os.path.join(BASE_DIR, "model", "ppo_mental_health_final.pt")
     
 ]
 

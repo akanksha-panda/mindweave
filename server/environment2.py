@@ -60,7 +60,7 @@ class MindweaveEnvironment(Environment):
             # Model path kept (used later lazily)
             current_dir = os.path.dirname(os.path.abspath(__file__))
             self.model_path = os.path.normpath(
-                os.path.join(current_dir, "..", "models", "ppo_mental_health_final.pt")
+                os.path.join(current_dir, "..", "model", "ppo_mental_health_final.pt")
             )
 
             print(".Environment Ready (Light Init).")

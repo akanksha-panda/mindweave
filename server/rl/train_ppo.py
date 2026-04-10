@@ -61,7 +61,7 @@ def train():
     model = PPOPolicy(state_dim)
     trainer = PPOTrainer(model)
     
-    os.makedirs("models", exist_ok=True)
+    os.makedirs("model", exist_ok=True)
 
     # 1. Start with Imitation Learning
     log_file = "logs/trajectories_v3.jsonl"
@@ -126,10 +126,10 @@ def train():
         if episode % 50 == 0:
             avg_reward = np.mean(reward_history[-50:])
             print(f"Epi {episode:4} | Start: {start_phrase[:15]:15} | Avg Reward: {avg_reward:6.2f} | PPO Loss: {loss:.4f}")
-            torch.save(model.state_dict(), "models/ppo_mental_health.pt")
+            torch.save(model.state_dict(), "model/ppo_mental_health.pt")
 
     print(".All Training Phases Complete.")
-    torch.save(model.state_dict(), "models/ppo_mental_health_final.pt")
+    torch.save(model.state_dict(), "model/ppo_mental_health_final.pt")
 
 if __name__ == "__main__":
     train()

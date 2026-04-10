@@ -48,4 +48,4 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["server*"]
-exclude = ["logs*", "models*"]
+exclude = ["logs*", "model*"]
