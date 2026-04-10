@@ -1,11 +1,33 @@
-from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
-load_dotenv()
-API_KEY = os.getenv("OPENAI_API_KEY")
+# =========================
+# . LOAD ENV (LOCAL ONLY)
+# =========================
+load_dotenv()  # loads MY_OPENAI_API_KEY from .env
 
-client = AsyncOpenAI(api_key=API_KEY) if API_KEY else None
+# =========================
+# . YOUR PERSONAL CONFIG
+# =========================
+MY_OPENAI_API_KEY = os.getenv("MY_OPENAI_API_KEY")
+MY_BASE_URL = "https://api.openai.com/v1"
+MY_MODEL_NAME = os.getenv("MY_MODEL_NAME", "gpt-4o-mini")
+
+# =========================
+# . YOUR CLIENT (SEPARATE)
+# =========================
+my_client = None
+
+try:
+    if MY_OPENAI_API_KEY:
+        my_client = AsyncOpenAI(
+            api_key=MY_OPENAI_API_KEY,
+            base_url=MY_BASE_URL
+        )
+except Exception as e:
+    print(f"[MY CLIENT ERROR] {e}")
+    my_client = None
 
 
 # =========================
@@ -40,36 +62,33 @@ def safe_parse_score(text):
 
 
 # =========================
-# . OPENAI GRADER
+# . YOUR LLM GRADER (SEPARATE API)
 # =========================
-async def grade_with_llm(user_input, response):
-    if client is None:
-        return 0.5  # . fallback (no crash)
+async def grade_with_my_llm(user_input, response):
+    if my_client is None:
+        return 0.5
 
     prompt = f"""
 Evaluate this therapy response:
-
 User: {user_input}
 AI: {response}
-
 Score from 0 to 1 based on:
 - empathy
 - relevance
 - helpfulness
-
 Return ONLY a number between 0 and 1.
 """
 
     try:
-        res = await client.chat.completions.create(
-            model="gpt-4o-mini",
+        res = await my_client.chat.completions.create(
+            model=MY_MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
 
         text = res.choices[0].message.content.strip()
-        return float(text)
+        return safe_parse_score(text)
 
     except Exception as e:
-        print(". OpenAI grading failed:", e)
+        print(f"[MY LLM ERROR] {e}")
         return 0.5
