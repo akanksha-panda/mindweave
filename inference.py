@@ -1,44 +1,39 @@
 import os
 import asyncio
-from dotenv import load_dotenv
 from openai import OpenAI
 
 from client import MindweaveEnv, MindweaveAction
 
+# =========================
 # . SUPPRESS LOGS
+# =========================
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
-
-# Load local .env (ignored on Hugging Face, used for local testing)
-load_dotenv()
+# =========================
+# . CONFIG (CHECKLIST-COMPLIANT)
+# =========================
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # NO default (important)
 
 # =========================
-# . CONFIG (Environment Based)
+# . OPENAI CLIENT (SAFE INIT)
 # =========================
+client = None
 
-# 1. API Key: We use .get() so the app can still boot to show a warning if it's missing
-API_KEY = os.environ.get("OPENAI_API_KEY")
+try:
+    if OPENAI_API_KEY:
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            base_url=API_BASE_URL
+        )
+except Exception:
+    client = None
 
-# 2. Model Name: Default to gpt-4o-mini if not specified
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
-
-# 3. Base URL: Default to OpenAI standard
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-
-# Validation check for the judges' logs
-if not API_KEY:
-    print("❌ ERROR: OPENAI_API_KEY not found in os.environ.")
-else:
-    print(f"✅ Environment initialized. Model: {MODEL_NAME}")
-
-# Initialize OpenAI client using the specific environment variables
-client = OpenAI(
-    api_key=API_KEY,
-    base_url=API_BASE_URL
-)
-
-
+# =========================
+# . MAPS
+# =========================
 ACTION_MAP = {
     0: "behavioral",
     1: "cognitive",
@@ -52,6 +47,9 @@ INTENT_MAP = ["statement", "question", "emotional"]
 # =========================
 def llm_echo(answer: str) -> str:
     try:
+        if client is None:
+            return answer  # fallback without breaking flow
+
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": f"Return ONLY this word:\n{answer}"}],
@@ -59,12 +57,12 @@ def llm_echo(answer: str) -> str:
             max_tokens=3,
         )
         return response.choices[0].message.content.strip().lower()
-    except:
-        return answer
 
+    except Exception:
+        return answer  # fallback
 
 # =========================
-# . SIMPLE POLICY (ENV-BASED)
+# . SIMPLE POLICY
 # =========================
 def simple_policy(state, task):
     emotion = state.get("emotion")
@@ -78,7 +76,6 @@ def simple_policy(state, task):
     if task == "intent_detection":
         return intent or "statement"
 
-    # agent selection
     if energy == 0:
         return "behavioral"
 
@@ -90,12 +87,11 @@ def simple_policy(state, task):
 
     return "emotional"
 
-
 # =========================
 # . MAIN
 # =========================
 async def main():
-    env = MindweaveEnv(base_url="http://localhost:8000")
+    env = MindweaveEnv(base_url="https://akanksha0208-mindweave.hf.space")
    
     print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
 
@@ -104,16 +100,13 @@ async def main():
 
     try:
         result = await env.reset()
-       
         obs = result.observation
 
         while not result.done:
-
             state = obs.state or {}
             task = obs.task
 
             ppo_output = simple_policy(state, task)
-
             action_text = llm_echo(ppo_output)
 
             if not action_text:
@@ -139,7 +132,6 @@ async def main():
 
         total_steps = step_idx - 1
         score = sum(rewards) / total_steps if total_steps > 0 else 0.0
-
         rewards_str = ",".join(f"{r:.2f}" for r in rewards)
 
         print(
@@ -157,5 +149,4 @@ async def main():
         await env.close()
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
