@@ -8,7 +8,7 @@
 
 """Mindweave Env Environment Client."""
 
-# mindweave_env/client.py
+# client.py
 
 from typing import Dict, Any, Optional
 from openenv.core import EnvClient

@@ -1,4 +1,4 @@
-# mindweave_env\server\baseline\baseline_agent.py
+# server\baseline\baseline_agent.py
 
 import httpx
 

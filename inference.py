@@ -9,15 +9,34 @@ from client import MindweaveEnv, MindweaveAction
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
+
+# Load local .env (ignored on Hugging Face, used for local testing)
 load_dotenv()
 
 # =========================
-# . CONFIG
+# . CONFIG (Environment Based)
 # =========================
-API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 
-client = OpenAI(api_key=API_KEY)
+# 1. API Key: We use .get() so the app can still boot to show a warning if it's missing
+API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# 2. Model Name: Default to gpt-4o-mini if not specified
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+
+# 3. Base URL: Default to OpenAI standard
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+
+# Validation check for the judges' logs
+if not API_KEY:
+    print("❌ ERROR: OPENAI_API_KEY not found in os.environ.")
+else:
+    print(f"✅ Environment initialized. Model: {MODEL_NAME}")
+
+# Initialize OpenAI client using the specific environment variables
+client = OpenAI(
+    api_key=API_KEY,
+    base_url=API_BASE_URL
+)
 
 
 ACTION_MAP = {

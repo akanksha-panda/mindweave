@@ -1,4 +1,4 @@
-# mindweave_env\server\core\model_store.py
+# server\core\model_store.py
 
 from sentence_transformers import SentenceTransformer
 

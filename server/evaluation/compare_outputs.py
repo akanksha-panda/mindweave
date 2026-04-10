@@ -1,4 +1,4 @@
-#mindweave_env\server\evaluation\compare_outputs.py
+#server\evaluation\compare_outputs.py
 
 import json
 import os

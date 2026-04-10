@@ -1,4 +1,4 @@
-# mindweave_env\server\evaluation\plot_results.py
+# server\evaluation\plot_results.py
 
 import matplotlib.pyplot as plt
 import json

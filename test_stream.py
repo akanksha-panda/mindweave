@@ -1,4 +1,4 @@
-#mindweave_env\test_stream.py
+#test_stream.py
 
 import requests
 import json

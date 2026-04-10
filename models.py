@@ -1,4 +1,4 @@
-# mindweave_env\models.py
+# models.py
 
 from openenv.core.env_server.types import Action, Observation
 from pydantic import Field

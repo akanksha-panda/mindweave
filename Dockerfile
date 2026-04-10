@@ -25,11 +25,12 @@ RUN uv pip install --system fastapi uvicorn
 ENV PYTHONPATH="/app"
 ENV MODULE_PATH="server.app:app"
 
-# 7. Health check
+# 7. Health check - UPDATE PORT TO 7860
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:7860/health || exit 1
 
-EXPOSE 8000
+# EXPOSE the port your app is actually using
+EXPOSE 7860
 
-# 8. Start server
+# 8. Start server - Keep 7860
 CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
