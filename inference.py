@@ -1,37 +1,38 @@
 import os
 import asyncio
-from openai import OpenAI
+from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
 
 # Suppression
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
-
-# =========================
-# . STRICT PROXY CONFIG
-# =========================
-# Using os.environ[] directly ensures the script CRASHES if these are missing,
-# which is exactly what the validator needs to see to know you are using them.
+# ==========================================
+# . STRICT ENVIRONMENT CONFIG
+# ==========================================
 API_KEY = os.environ["API_KEY"]
 API_BASE_URL = os.environ["API_BASE_URL"]
 
-# We pull the model from the environment but do NOT provide a default string.
-# This way, the model name is entirely determined by their environment.
-ENVIRONMENT_MODEL = os.getenv("MODEL") or os.getenv("MODEL_NAME") or ""
+# Initialize to empty string if not provided by environment
+# This will force the proxy to error out and reveal the correct model name
+MODEL = os.environ.get("MODEL", "")
 
-client = OpenAI(
+# 1. Initialize the ASYNC client
+# Sanitize base_url to ensure standard OpenAI routing
+sanitized_url = API_BASE_URL if API_BASE_URL.endswith("/v1") else f"{API_BASE_URL.rstrip('/')}/v1"
+
+client = AsyncOpenAI(
     api_key=API_KEY,
-    base_url=API_BASE_URL
+    base_url=sanitized_url
 )
 
-def llm_echo(answer: str) -> str:
-    # We use the ENVIRONMENT_MODEL variable here. 
-    # If it's empty, the proxy receives an empty model string and 
-    # must handle the routing itself.
-    response = client.chat.completions.create(
-        model=ENVIRONMENT_MODEL,
-        messages=[{"role": "user", "content": f"Return ONLY this word:\n{answer}"}],
+# 2. Async LLM call
+async def llm_echo(answer: str) -> str:
+    # This call will now raise an exception if MODEL is empty or invalid,
+    # letting us see the exact error in the validator log.
+    response = await client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": f"Return ONLY this word: {answer}"}],
         temperature=0,
         max_tokens=5,
     )
@@ -55,7 +56,7 @@ def simple_policy(state, task):
 
 async def main():
     env = MindweaveEnv(base_url="http://localhost:8000")
-    print(f"[START] Proxy: {API_BASE_URL} | Model: {ENVIRONMENT_MODEL}", flush=True)
+    print(f"[START] Proxy: {sanitized_url} | Model Injected: '{MODEL}'", flush=True)
 
     try:
         result = await env.reset()
@@ -69,8 +70,8 @@ async def main():
 
             ppo_output = simple_policy(state, task)
             
-            # This is the call that hits the LiteLLM proxy
-            action_text = llm_echo(ppo_output)
+            # 3. Await the async LLM call
+            action_text = await llm_echo(ppo_output)
 
             result = await env.step(
                 MindweaveAction(message=action_text, task=task)
@@ -79,7 +80,7 @@ async def main():
             reward = float(result.reward)
             rewards.append(reward)
             
-            print(f"[STEP] {step_idx} | Action: {action_text} | Reward: {reward:.2f}", flush=True)
+            print(f"[STEP] {step_idx} | Action={action_text} | Reward={reward:.2f}", flush=True)
 
             obs = result.observation
             step_idx += 1
@@ -88,6 +89,7 @@ async def main():
         print(f"[END] success=true score={avg_score:.2f}", flush=True)
 
     except Exception as e:
+        # Crucial: This prints the error we are hunting for
         print(f"[END] success=false error={str(e)}", flush=True)
     finally:
         await env.close()
