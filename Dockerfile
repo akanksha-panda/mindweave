@@ -27,13 +27,11 @@ RUN uv pip install --system fastapi uvicorn
 ENV PYTHONPATH="/app"
 ENV MODULE_PATH="server.app:app"
 
-# 7. Health check - SET TO 7860
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
+# 7. Health check - SET TO 8000
+# Using 0.0.0.0 is often more reliable than localhost in some Docker networks
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://0.0.0.0:8000/health || exit 1
 
-# EXPOSE both if necessary, but 7860 is your primary
-
-EXPOSE 7860
-
-# 8. Start server - SET TO 7860
-CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
+# 8. Start server - SET TO 8000
+# This ensures Point 7 and Point 8 are on the SAME DOOR.
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
