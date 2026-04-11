@@ -65,12 +65,13 @@ def simple_policy(state, task):
     return "emotional"
 
 # =========================
-# MAIN (UNTOUCHED STRUCTURE)
+# MAIN
 # =========================
 async def main():
-    print(f"[START] base_url={API_BASE_URL} model={MODEL_NAME} image={IMAGE_NAME}", flush=True)
+    # REQUIRED START LOG FOR VALIDATOR
+    print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
 
-    # Reverted base_url to 8000 
+    # Initializing from Docker using the Mindweave registry on port 8000
     env = await MindweaveEnv.from_docker_image(IMAGE_NAME, base_url="http://localhost:8000")
 
     try:
