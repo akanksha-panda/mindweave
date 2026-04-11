@@ -42,7 +42,7 @@ async def llm_echo(answer: str) -> str:
         return "hello"
 
 # =========================
-# POLICY
+# POLICY (UNTOUCHED)
 # =========================
 def simple_policy(state, task):
     emotion = state.get("emotion")
@@ -65,12 +65,13 @@ def simple_policy(state, task):
     return "emotional"
 
 # =========================
-# MAIN
+# MAIN (UNTOUCHED STRUCTURE)
 # =========================
 async def main():
     print(f"[START] base_url={API_BASE_URL} model={MODEL_NAME} image={IMAGE_NAME}", flush=True)
 
-    env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
+    # Added base_url=7860 to match your Dockerfile EXPOSE and CMD
+    env = await MindweaveEnv.from_docker_image(IMAGE_NAME, base_url="http://localhost:7860")
 
     try:
         result = await env.reset()
