@@ -71,8 +71,8 @@ async def main():
     # REQUIRED START LOG FOR VALIDATOR
     print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
 
-    # Initializing from Docker using the Mindweave registry on port 8000
-    env = await MindweaveEnv.from_docker_image(IMAGE_NAME, base_url="http://localhost:8000")
+    # Initializing from Docker using the Mindweave registry on port 7860
+    env = await MindweaveEnv.from_docker_image(IMAGE_NAME, base_url="http://localhost:7860")
 
     try:
         result = await env.reset()
