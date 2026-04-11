@@ -1,4 +1,17 @@
 spec_version: 1
 name: mindweave
+description: "An RL-powered psychological support AI that utilizes Reinforcement Learning (PPO) to select optimal therapeutic response strategies based on user emotion and intent."
 sdk: docker
-app_port: 7860
+app_port: 8000
+
+# Metadata 
+tasks:
+  - id: "emotion_classification"
+    description: "Identifies the core emotion from user input (e.g., sad, anxious, neutral)."
+    grader: "programmatic"
+  - id: "intent_detection"
+    description: "Determines if the user intent is emotional disclosure, a question, or a statement."
+    grader: "programmatic"
+  - id: "agent_selection"
+    description: "PPO-driven task to select between cognitive, behavioral, or emotional agents."
+    grader: "programmatic"
