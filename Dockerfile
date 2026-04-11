@@ -15,22 +15,25 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 # 3. Copy project
 COPY . /app/
 
-# 4. Install project (THIS reads pyproject.toml automatically)
+# 4. Install project
 RUN uv pip install --system --no-cache -e .
 
-# 5. Ensure runtime deps (safety layer)
+
+
+# 5. Ensure runtime deps
 RUN uv pip install --system fastapi uvicorn
 
 # 6. Environment variables
 ENV PYTHONPATH="/app"
 ENV MODULE_PATH="server.app:app"
 
-# 7. Health check - UPDATE PORT TO 7860
+# 7. Health check - SET TO 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# EXPOSE the port your app is actually using
-EXPOSE 7860
+# EXPOSE both if necessary, but 7860 is your primary
 
-# 8. Start server - Keep 7860
+EXPOSE 8000
+
+# 8. Start server - SET TO 7860
 CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
