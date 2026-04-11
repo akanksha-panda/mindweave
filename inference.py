@@ -4,15 +4,16 @@ from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
 
 # =========================
-# CONFIG
+# CONFIG 
 # =========================
-API_KEY = os.environ["API_KEY"]
-API_BASE_URL = os.environ["API_BASE_URL"]
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
+MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-
-# 🔥 Docker image (with fallback)
-IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME", "registry.hf.space/akanksha0208-mindweave:latest")
+IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
+    "LOCAL_IMAGE_NAME",
+    "registry.hf.space/akanksha0208-mindweave:latest"
+)
 
 client = AsyncOpenAI(
     api_key=API_KEY,
@@ -34,11 +35,10 @@ async def llm_echo(answer: str) -> str:
             max_tokens=5,
         )
 
-        text = (completion.choices[0].message.content or "").strip().lower()
-        return text if text else "hello"
+        return (completion.choices[0].message.content or "").strip().lower()
 
     except Exception as e:
-        print(f"[DEBUG] LLM failed: {e}", flush=True)
+        print(f"[DEBUG] LLM error: {e}", flush=True)
         return "hello"
 
 # =========================
@@ -68,11 +68,11 @@ def simple_policy(state, task):
 # MAIN
 # =========================
 async def main():
-    print(f"[START] Proxy: {API_BASE_URL} | Image: {IMAGE_NAME}", flush=True)
+    print(f"[START] base_url={API_BASE_URL} model={MODEL_NAME} image={IMAGE_NAME}", flush=True)
+
+    env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
 
     try:
-        env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
-
         result = await env.reset()
         obs = result.observation
 
@@ -90,8 +90,7 @@ async def main():
             state = obs.state or {}
             task = obs.task
 
-            ppo_output = simple_policy(state, task)
-            action_text = await llm_echo(ppo_output)
+            action_text = await llm_echo(simple_policy(state, task))
 
             result = await env.step(
                 MindweaveAction(message=action_text, task=task)
@@ -100,7 +99,7 @@ async def main():
             rewards.append(float(result.reward))
 
             print(
-                f"[STEP] step={step_idx} action={action_text} reward={result.reward:.2f} done={str(result.done).lower()} error=null",
+                f"[STEP] step={step_idx} action={action_text} reward={result.reward:.2f}",
                 flush=True
             )
 
@@ -109,19 +108,13 @@ async def main():
 
         score = sum(rewards) / len(rewards) if rewards else 0.0
 
-        print(
-            f"[END] success=true steps={step_idx-1} score={score:.2f}",
-            flush=True
-        )
+        print(f"[END] success=true score={score:.2f}", flush=True)
 
     except Exception as e:
         print(f"[END] success=false error={str(e)}", flush=True)
 
     finally:
-        try:
-            await env.close()
-        except:
-            pass
+        await env.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
