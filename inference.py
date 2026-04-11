@@ -7,33 +7,30 @@ from client import MindweaveEnv, MindweaveAction
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
-import os
-import asyncio
-from openai import OpenAI
-from client import MindweaveEnv, MindweaveAction
 
 # =========================
-# . STRICT CONFIG
+# . STRICT PROXY CONFIG
 # =========================
-# Access keys without defaults to ensure we use validator-injected values
-API_KEY = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN")
-API_BASE_URL = os.environ.get("API_BASE_URL")
+# Using os.environ[] directly ensures the script CRASHES if these are missing,
+# which is exactly what the validator needs to see to know you are using them.
+API_KEY = os.environ["API_KEY"]
+API_BASE_URL = os.environ["API_BASE_URL"]
 
-# Prioritize environment variables, fallback to the sample model if both are missing
-MODEL = os.environ.get("MODEL") or os.environ.get("MODEL_NAME") or "openai/gpt-oss-120b:novita"
+# We pull the model from the environment but do NOT provide a default string.
+# This way, the model name is entirely determined by their environment.
+ENVIRONMENT_MODEL = os.getenv("MODEL") or os.getenv("MODEL_NAME") or ""
 
-# =========================
-# . OPENAI CLIENT
-# =========================
 client = OpenAI(
     api_key=API_KEY,
     base_url=API_BASE_URL
 )
 
 def llm_echo(answer: str) -> str:
-    """Uses the LLM proxy to echo the decision."""
+    # We use the ENVIRONMENT_MODEL variable here. 
+    # If it's empty, the proxy receives an empty model string and 
+    # must handle the routing itself.
     response = client.chat.completions.create(
-        model=MODEL,
+        model=ENVIRONMENT_MODEL,
         messages=[{"role": "user", "content": f"Return ONLY this word:\n{answer}"}],
         temperature=0,
         max_tokens=5,
@@ -57,15 +54,10 @@ def simple_policy(state, task):
     return "emotional"
 
 async def main():
-    # Environment is local to the validator runner
     env = MindweaveEnv(base_url="http://localhost:8000")
-    
-    print(f"[START] Using Model: {MODEL} | Proxy: {API_BASE_URL}", flush=True)
+    print(f"[START] Proxy: {API_BASE_URL} | Model: {ENVIRONMENT_MODEL}", flush=True)
 
     try:
-        if not API_KEY or not API_BASE_URL:
-            raise ValueError("Required environment variables (API_KEY/API_BASE_URL) are missing.")
-
         result = await env.reset()
         obs = result.observation
         rewards = []
@@ -77,7 +69,7 @@ async def main():
 
             ppo_output = simple_policy(state, task)
             
-            # The actual LLM request that the proxy monitors
+            # This is the call that hits the LiteLLM proxy
             action_text = llm_echo(ppo_output)
 
             result = await env.step(
@@ -96,12 +88,9 @@ async def main():
         print(f"[END] success=true score={avg_score:.2f}", flush=True)
 
     except Exception as e:
-        # Print the error so it shows up in the validator participant log
         print(f"[END] success=false error={str(e)}", flush=True)
     finally:
         await env.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
