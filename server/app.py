@@ -6,7 +6,7 @@ from openenv.core.env_server.http_server import create_app
 from models import MindweaveAction, MindweaveObservation
 from server.environment2 import MindweaveEnvironment
 from typing import List, Dict
-from pydantic import BaseModel  # ← moved to top
+from pydantic import BaseModel
 
 # =========================
 # CREATE APP
@@ -20,6 +20,36 @@ app = create_app(
 )
 
 # =========================
+# GRADER FUNCTIONS - pointed to by openenv.yaml
+# =========================
+def grade_emotion(input: str, action: str) -> float:
+    from server.environment import MentalHealthEnv
+    env = MentalHealthEnv()
+    state = env.reset(input)
+    gt = state.get("emotion", "neutral")
+    raw = 1.0 if action.strip().lower() == gt else 0.0
+    return max(0.001, min(0.999, raw))
+
+def grade_intent(input: str, action: str) -> float:
+    from server.environment import MentalHealthEnv
+    env = MentalHealthEnv()
+    state = env.reset(input)
+    gt = state.get("intent", "statement")
+    raw = 1.0 if action.strip().lower() == gt else 0.0
+    return max(0.001, min(0.999, raw))
+
+def grade_agent(input: str, action: str) -> float:
+    from server.environment import MentalHealthEnv
+    env = MentalHealthEnv()
+    state = env.reset(input)
+    _, raw, _ = env.step({
+        "task": "agent_selection",
+        "type": action.strip().lower(),
+        "message": action.strip().lower(),
+    })
+    return max(0.001, min(0.999, (raw + 5.0) / 20.0))
+
+# =========================
 # /tasks ENDPOINT
 # =========================
 @app.get("/tasks")
@@ -28,63 +58,67 @@ def get_tasks() -> List[Dict]:
         {
             "id": "emotion_classification",
             "description": "Identifies the core emotion from user input (e.g. sad, anxious, neutral).",
-            "grader": "programmatic",
+            "grader": "server.app:grade_emotion",
             "reward_range": [0.001, 0.999],
         },
         {
             "id": "intent_detection",
             "description": "Determines if user intent is emotional disclosure, a question, or a statement.",
-            "grader": "programmatic",
+            "grader": "server.app:grade_intent",
             "reward_range": [0.001, 0.999],
         },
         {
             "id": "agent_selection",
             "description": "PPO-driven selection between cognitive, behavioral, or emotional agents.",
-            "grader": "programmatic",
+            "grader": "server.app:grade_agent",
             "reward_range": [0.001, 0.999],
         },
     ]
 
+# =========================
+# GRADER REQUEST MODEL
+# =========================
 class GraderRequest(BaseModel):
     task_id: str = "emotion_classification"
     input: str
-    
 
+# =========================
+# /grader ENDPOINT
+# =========================
 @app.post("/grader")
 def run_grader(request: GraderRequest) -> Dict:
     import asyncio
-    env_instance = MindweaveEnvironment()
-
-    # reset with real user input
-    env_instance.reset()
-    state = env_instance.env.reset(request.input)
-    env_instance.initial_state = state.copy()
 
     if request.task_id == "emotion_classification":
-        # action = what environment detected from input
+        action = grade_emotion(request.input, "")
+        # re-run to get detected emotion as action
+        from server.environment import MentalHealthEnv
+        env = MentalHealthEnv()
+        state = env.reset(request.input)
         action = state.get("emotion", "neutral")
-        gt = state.get("emotion", "neutral")
-        raw = 1.0 if action == gt else 0.0
-        score = env_instance.normalize_reward(raw, request.task_id)
+        score = grade_emotion(request.input, action)
 
     elif request.task_id == "intent_detection":
-        # action = what environment detected from input
+        from server.environment import MentalHealthEnv
+        env = MentalHealthEnv()
+        state = env.reset(request.input)
         action = state.get("intent", "statement")
-        gt = state.get("intent", "statement")
-        raw = 1.0 if action == gt else 0.0
-        score = env_instance.normalize_reward(raw, request.task_id)
+        score = grade_intent(request.input, action)
 
     elif request.task_id == "agent_selection":
-        # action = what PPO selects
+        env_instance = MindweaveEnvironment()
+        env_instance.reset()
+        env_instance.env.reset(request.input)
+        env_instance.initial_state = env_instance.env.state.copy()
         env_instance.current_task_index = 2
         obs = asyncio.run(env_instance.step_async(
             MindweaveAction(
-                message="emotional",  # seed message, PPO overrides
+                message="emotional",
                 task="agent_selection"
             )
         ))
         action = obs.state.get("agent", "emotional")
-        score = obs.reward
+        score = grade_agent(request.input, action)
     else:
         action = "unknown"
         score = 0.001
@@ -92,7 +126,7 @@ def run_grader(request: GraderRequest) -> Dict:
     return {
         "task_id": request.task_id,
         "input": request.input,
-        "action": action,        # ← derived from RL/environment
+        "action": action,
         "score": round(max(0.001, min(0.999, score)), 4),
         "reward_range": [0.001, 0.999],
     }
