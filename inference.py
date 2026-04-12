@@ -75,7 +75,7 @@ async def main():
 
     env = await MindweaveEnv.from_docker_image(
         IMAGE_NAME,
-        base_url="https://akanksha0208-mindweave.hf.space"
+        base_url="http://localhost:8000"
     )
 
     try:
