@@ -9,7 +9,6 @@ from client import MindweaveEnv, MindweaveAction
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-
 IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
     "LOCAL_IMAGE_NAME",
     "registry.hf.space/akanksha0208-mindweave:latest"
@@ -21,67 +20,71 @@ client = AsyncOpenAI(
 )
 
 # =========================
+# TASK PROMPTS
+# =========================
+TASKS = {
+    "emotion_classification": {
+        "prompt": lambda state: (
+            f"The user said: '{state.get('input', '')}'. "
+            f"Classify their core emotion in ONE lowercase word "
+            f"(e.g. neutral, anxious, sad, happy, failure, tired, motivated)."
+        ),
+    },
+    "intent_detection": {
+        "prompt": lambda state: (
+            f"The user said: '{state.get('input', '')}'. "
+            f"Detect their intent. Reply with ONE word only: "
+            f"emotional, question, or statement."
+        ),
+    },
+    "agent_selection": {
+        "prompt": lambda state: (
+            f"Mental health state — emotion: {state.get('emotion')}, "
+            f"intent: {state.get('intent')}, "
+            f"energy: {state.get('energy')}, "
+            f"distortion: {state.get('distortion')}. "
+            f"Select ONE agent: cognitive, behavioral, or emotional."
+        ),
+    },
+}
+
+# =========================
 # LLM CALL
 # =========================
-async def llm_echo(answer: str) -> str:
+async def llm_echo(prompt: str) -> str:
     try:
         completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "Return ONLY one word."},
-                {"role": "user", "content": answer}
+                {"role": "system", "content": "Return ONLY one lowercase word. No punctuation, no explanation."},
+                {"role": "user", "content": prompt}
             ],
             temperature=0,
             max_tokens=5,
         )
-
         return (completion.choices[0].message.content or "").strip().lower()
-
     except Exception as e:
         print(f"[DEBUG] LLM error: {e}", flush=True)
-        return "hello"
-
-# =========================
-# POLICY (UNTOUCHED)
-# =========================
-def simple_policy(state, task):
-    emotion = state.get("emotion")
-    intent = state.get("intent")
-    energy = state.get("energy", 1)
-    distortion = state.get("distortion", 5)
-
-    if task == "emotion_classification":
-        return emotion or "neutral"
-
-    if task == "intent_detection":
-        return intent or "statement"
-
-    if energy == 0:
-        return "behavioral"
-
-    if distortion > 6:
-        return "cognitive"
-
-    return "emotional"
+        return "neutral"
 
 # =========================
 # MAIN
 # =========================
 async def main():
-    # REQUIRED START LOG FOR VALIDATOR
     print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
 
-    # Initializing from Docker using the Mindweave registry on port 7860
-    env = await MindweaveEnv.from_docker_image(IMAGE_NAME, base_url="http://localhost:8000")
+    env = await MindweaveEnv.from_docker_image(
+        IMAGE_NAME,
+        base_url="https://akanksha0208-mindweave.hf.space"
+    )
 
     try:
         result = await env.reset()
         obs = result.observation
-
         rewards = []
         step_idx = 1
 
-        # 🔥 GUARANTEED API CALL
+        # guaranteed LLM API call
         await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": "ping"}],
@@ -90,31 +93,36 @@ async def main():
 
         while not result.done:
             state = obs.state or {}
-            task = obs.task
+            task_id = obs.task
 
-            action_text = await llm_echo(simple_policy(state, task))
+            # build prompt for current task
+            task_def = TASKS.get(task_id)
+            if task_def:
+                prompt = task_def["prompt"](state)
+            else:
+                prompt = f"Respond to task: {task_id}"
 
+            # LLM decides the action
+            action_text = await llm_echo(prompt)
+
+            # send to environment2.py step_async via env.step
             result = await env.step(
-                MindweaveAction(message=action_text, task=task)
+                MindweaveAction(message=action_text, task=task_id)
             )
 
             rewards.append(float(result.reward))
-
             print(
-                f"[STEP] step={step_idx} action={action_text} reward={result.reward:.2f}",
+                f"[STEP] step={step_idx} task={task_id} action={action_text} reward={result.reward:.2f}",
                 flush=True
             )
-
             obs = result.observation
             step_idx += 1
 
         score = sum(rewards) / len(rewards) if rewards else 0.0
-
         print(f"[END] success=true score={score:.2f}", flush=True)
 
     except Exception as e:
         print(f"[END] success=false error={str(e)}", flush=True)
-
     finally:
         await env.close()
 
