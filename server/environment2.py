@@ -118,9 +118,12 @@ class MindweaveEnvironment(Environment):
     # =========================
     def normalize_reward(self, r, task):
         if task in ["emotion_classification", "intent_detection"]:
-            return float(max(0.0, min(1.0, r)))
+            raw = float(max(0.0, min(1.0, r)))
         else:
-            return float(max(0.0, min(1.0, (r + 5.0) / 20.0)))
+            raw = float(max(0.0, min(1.0, (r + 5.0) / 20.0)))
+        
+        # ← KEY FIX: clamp to 0.1 - 0.99 (validator requirement)
+        return max(0.1, min(0.99, raw))
 
     # =========================
     # . STEP ASYNC
