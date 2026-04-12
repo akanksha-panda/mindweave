@@ -8,12 +8,12 @@ app: server.app:app
 tasks:
   - id: "emotion_classification"
     description: "Identifies the core emotion from user input."
-    grader: "graders.emotion:EmotionGrader"
+    grader: "server.grader:MindweaveGrader"
 
   - id: "intent_detection"
     description: "Determines if user intent is emotional, question, or statement."
-    grader: "graders.intent:IntentGrader"
+    grader: "server.grader:MindweaveGrader"
 
   - id: "agent_selection"
     description: "PPO-driven selection between cognitive, behavioral, or emotional agents."
-    grader: "graders.agent:AgentGrader"
+    grader: "server.grader:MindweaveGrader"
