@@ -18,7 +18,7 @@ app = create_app(
 )
 
 # =========================
-# /tasks ENDPOINT - validator scans this
+# /tasks ENDPOINT -
 # =========================
 @app.get("/tasks")
 def get_tasks() -> List[Dict]:
