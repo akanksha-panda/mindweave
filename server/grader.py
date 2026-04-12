@@ -1,7 +1,7 @@
 # server/grader.py
 
 def clamp_score(score: float) -> float:
-    return max(0.001, min(0.999, score))
+    return max(0.10, min(0.99, score))
 
 # =========================
 # TOP LEVEL GRADER FUNCTIONS
