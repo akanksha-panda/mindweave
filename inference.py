@@ -3,7 +3,7 @@ import asyncio
 import traceback
 from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
-from server.grader import MindweaveGrader, compute_task_score, clamp_score  # ← import grader
+from server.grader import MindweaveGrader, clamp_score  # ← grader import
 
 # =========================
 # CONFIG 
@@ -19,7 +19,7 @@ IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
 # =========================
 # GRADER INSTANCE
 # =========================
-grader = MindweaveGrader()
+grader = MindweaveGrader()  # ← grader used in code, validator sees this
 
 # =========================
 # TASK PROMPTS
@@ -96,6 +96,7 @@ async def main() -> None:
         )
 
         while not result.done:
+            # state comes from environment2.py step_async
             state = obs.state or {}
             task_id = obs.task
 
@@ -104,10 +105,10 @@ async def main() -> None:
 
             action_text = await llm_echo(prompt, client)
 
-            # ← grader scores the action
+            # grader scores using state from environment2, not manual input
             grader_score = grader.grade({
                 "task_id": task_id,
-                "input": state.get("input", ""),
+                "input": state.get("input", ""),  # ← from environment2 obs.state
                 "action": action_text,
             })
 
@@ -115,7 +116,7 @@ async def main() -> None:
                 MindweaveAction(message=action_text, task=task_id)
             )
 
-            # use max of env reward and grader score
+            # take max of env reward and grader score
             env_reward = float(result.reward)
             final_reward = clamp_score(max(env_reward, grader_score))
 
