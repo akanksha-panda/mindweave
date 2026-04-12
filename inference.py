@@ -19,11 +19,18 @@ IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
 BENCHMARK = "mindweave"
 MAX_TOKENS = 5
 SUCCESS_SCORE_THRESHOLD = 0.10
+EPSILON = 1e-6  # ← strict boundary buffer
 
 # =========================
 # GRADER INSTANCE
 # =========================
 grader = MindweaveGrader()
+
+# =========================
+# STRICT CLAMP - never exactly 0 or 1
+# =========================
+def strict_clamp(value: float) -> float:
+    return max(0.0 + EPSILON, min(1.0 - EPSILON, float(value)))
 
 # =========================
 # HARDCODED INPUTS - same as environment2.py
@@ -105,7 +112,7 @@ async def main() -> None:
 
     all_rewards = []
     step_idx = 1
-    final_score = 0.10
+    final_score = strict_clamp(0.10)
     success = False
 
     try:
@@ -116,13 +123,11 @@ async def main() -> None:
             max_tokens=1
         )
 
-        # 3 tasks × 3 inputs = 9 steps
         for task_def in TASK_DEFINITIONS:
             label = task_def["label"]
             task_id = task_def["task_id"]
             task_rewards = []
 
-            # ← task start
             print(f"[START] task={label} env={BENCHMARK} model={MODEL_NAME}", flush=True)
 
             for user_input in TEST_INPUTS:
@@ -145,32 +150,29 @@ async def main() -> None:
                     MindweaveAction(message=action_text, task=task_id)
                 )
 
-                env_reward = float(result.reward) or 0.10
-
-                # clamp BEFORE storing and printing
-                final_reward = max(0.01, min(0.99, float(
-                    clamp_score(max(env_reward, grader_score))
-                )))
+                # strict clamp with epsilon - never exactly 0 or 1
+                env_reward = strict_clamp(float(result.reward) if result.reward else 0.10)
+                grader_score = strict_clamp(float(grader_score))
+                final_reward = strict_clamp(max(env_reward, grader_score))
 
                 all_rewards.append(final_reward)
                 task_rewards.append(final_reward)
 
                 print(
-                    f"[STEP] step={step_idx} label={label} action={action_text} score={final_reward:.2f}",
+                    f"[STEP] step={step_idx} label={label} action={action_text} score={final_reward:.4f}",
                     flush=True
                 )
                 step_idx += 1
 
-            # clamp task score BEFORE printing
+            # strict clamp task score
             raw_task_score = sum(task_rewards) / len(task_rewards) if task_rewards else 0.10
-            task_score = max(0.01, min(0.99, float(raw_task_score)))
+            task_score = strict_clamp(raw_task_score)
 
-            # ← task end with score
-            print(f"[END] task={label} score={task_score:.2f} steps={len(TEST_INPUTS)}", flush=True)
+            print(f"[END] task={label} score={task_score:.4f} steps={len(TEST_INPUTS)}", flush=True)
 
-        # clamp final score BEFORE printing
+        # strict clamp final score
         raw_score = sum(all_rewards) / len(all_rewards) if all_rewards else 0.10
-        final_score = max(0.01, min(0.99, float(raw_score)))
+        final_score = strict_clamp(raw_score)
         success = final_score >= SUCCESS_SCORE_THRESHOLD
 
     except Exception as e:
@@ -183,10 +185,11 @@ async def main() -> None:
         except Exception as e:
             print(f"[DEBUG] env.close() error: {e}", flush=True)
 
-        rewards_str = ",".join(f"{r:.2f}" for r in all_rewards)
-        final_score = max(0.01, min(0.99, float(final_score)))
+        # strict clamp rewards_str values too
+        rewards_str = ",".join(f"{strict_clamp(r):.4f}" for r in all_rewards)
+        final_score = strict_clamp(final_score)
         print(
-            f"[END] success={success} steps={step_idx-1} score={final_score:.2f} rewards={rewards_str}",
+            f"[END] success={success} steps={step_idx-1} score={final_score:.4f} rewards={rewards_str}",
             flush=True
         )
 
