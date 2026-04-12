@@ -1,58 +1,70 @@
 # server/grader.py
 
 def clamp_score(score: float) -> float:
-    return max(0.10, min(0.99, score))
+    return max(0.10, min(0.99, score))  # ← 0.10 to 0.99
 
 # =========================
 # TOP LEVEL GRADER FUNCTIONS
 # matched by openenv.yaml grader field
 # =========================
-def grade_emotion(env, *args, **kwargs) -> float:
+def grade_emotion(env_or_input, action=None, *args, **kwargs) -> float:
     from server.environment import MentalHealthEnv
+    # handle both dict and (str, str) calling conventions
+    if isinstance(env_or_input, dict):
+        input_text = env_or_input.get("input", "") if isinstance(env_or_input.get("input"), str) else ""
+        pred = env_or_input.get("action", "").strip().lower()
+    else:
+        input_text = env_or_input or ""
+        pred = (action or "").strip().lower()
+    
     e = MentalHealthEnv()
-    input_text = env.get("input", "") if isinstance(env.get("input"), str) else ""
     state = e.reset(input_text)
     gt = state.get("emotion", "neutral")
-    pred = env.get("action", "").strip().lower()
-    raw = 1.0 if pred == gt else 0.0
-    return clamp_score(raw)
+    raw = 0.99 if pred == gt else 0.10  # ← never exactly 0.0 or 1.0!
+    return raw
 
-def grade_intent(env, *args, **kwargs) -> float:
+def grade_intent(env_or_input, action=None, *args, **kwargs) -> float:
     from server.environment import MentalHealthEnv
+    if isinstance(env_or_input, dict):
+        input_text = env_or_input.get("input", "") if isinstance(env_or_input.get("input"), str) else ""
+        pred = env_or_input.get("action", "").strip().lower()
+    else:
+        input_text = env_or_input or ""
+        pred = (action or "").strip().lower()
+
     e = MentalHealthEnv()
-    input_text = env.get("input", "") if isinstance(env.get("input"), str) else ""
     state = e.reset(input_text)
     gt = state.get("intent", "statement")
-    pred = env.get("action", "").strip().lower()
-    raw = 1.0 if pred == gt else 0.0
-    return clamp_score(raw)
+    raw = 0.99 if pred == gt else 0.10  # ← never exactly 0.0 or 1.0!
+    return raw
 
-def grade_agent(env, *args, **kwargs) -> float:
-    from server.environment import MentalHealthEnv
-    e = MentalHealthEnv()
-    input_text = env.get("input", "") if isinstance(env.get("input"), str) else ""
-    state = e.reset(input_text)
-    _, raw, _ = e.step({
-        "task": "agent_selection",
-        "type": env.get("action", "emotional").strip().lower(),
-        "message": env.get("action", "emotional").strip().lower(),
-    })
-    return clamp_score((raw + 5.0) / 20.0)
+def grade_agent(env_or_input, action=None, *args, **kwargs) -> float:
+    import asyncio
+    from server.environment2 import MindweaveEnvironment
+    from models import MindweaveAction
 
-def compute_task_score(task_id: str, state: dict, action: str) -> float:
-    if task_id == "emotion_classification":
-        return grade_emotion({"input": state.get("input", ""), "action": action})
-    elif task_id == "intent_detection":
-        return grade_intent({"input": state.get("input", ""), "action": action})
-    elif task_id == "agent_selection":
-        return grade_agent({"input": state.get("input", ""), "action": action})
-    return 0.001
+    if isinstance(env_or_input, dict):
+        input_text = env_or_input.get("input", "") if isinstance(env_or_input.get("input"), str) else ""
+        action_text = env_or_input.get("action", "emotional").strip().lower()
+    else:
+        input_text = env_or_input or ""
+        action_text = (action or "emotional").strip().lower()
 
-# =========================
-# CONSOLIDATED GRADER CLASS
-# =========================
+    env_instance = MindweaveEnvironment()
+    env_instance.reset()
+    env_instance.env.reset(input_text)
+    env_instance.initial_state = env_instance.env.state.copy()
+    env_instance.current_task_index = 2
+
+    obs = asyncio.run(env_instance.step_async(
+        MindweaveAction(message=action_text, task="agent_selection")
+    ))
+
+    return clamp_score(obs.reward)
+
+
+
 class MindweaveGrader:
-
     def emotionGrader(self, env, *args, **kwargs) -> float:
         return grade_emotion(env, *args, **kwargs)
 
@@ -70,4 +82,4 @@ class MindweaveGrader:
             return self.intentGrader(env, *args, **kwargs)
         elif task_id == "agent_selection":
             return self.agentGrader(env, *args, **kwargs)
-        return 0.001
+        return 0.10  # ← was 0.001, now strictly within (0, 1)
