@@ -122,8 +122,8 @@ class MindweaveEnvironment(Environment):
         else:
             raw = float(max(0.0, min(1.0, (r + 5.0) / 20.0)))
         
-        # ← KEY FIX: clamp to 0.1 - 0.99 (validator requirement)
-        return max(0.1, min(0.99, raw))
+        # ← KEY FIX: clamp to 0.001 - 0.999
+        return max(0.001, min(0.999, raw))
 
     # =========================
     # . STEP ASYNC
