@@ -36,7 +36,9 @@ class MindweaveGrader:
     def emotionGrader(self, env, *args, **kwargs) -> float:
         from server.environment import MentalHealthEnv
         e = MentalHealthEnv()
-        state = e.reset(env.get("input", ""))
+        # ← input is already state dict from environment2
+        input_text = env.get("input", "") if isinstance(env.get("input"), str) else ""
+        state = e.reset(input_text)
         gt = state.get("emotion", "neutral")
         pred = env.get("action", "").strip().lower()
         raw = 1.0 if pred == gt else 0.0
@@ -45,7 +47,8 @@ class MindweaveGrader:
     def intentGrader(self, env, *args, **kwargs) -> float:
         from server.environment import MentalHealthEnv
         e = MentalHealthEnv()
-        state = e.reset(env.get("input", ""))
+        input_text = env.get("input", "") if isinstance(env.get("input"), str) else ""
+        state = e.reset(input_text)
         gt = state.get("intent", "statement")
         pred = env.get("action", "").strip().lower()
         raw = 1.0 if pred == gt else 0.0
@@ -54,7 +57,8 @@ class MindweaveGrader:
     def agentGrader(self, env, *args, **kwargs) -> float:
         from server.environment import MentalHealthEnv
         e = MentalHealthEnv()
-        state = e.reset(env.get("input", ""))
+        input_text = env.get("input", "") if isinstance(env.get("input"), str) else ""
+        state = e.reset(input_text)
         _, raw, _ = e.step({
             "task": "agent_selection",
             "type": env.get("action", "emotional").strip().lower(),
