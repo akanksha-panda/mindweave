@@ -3,7 +3,7 @@ import asyncio
 import traceback
 from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
-from server.grader import MindweaveGrader, clamp_score  # ← grader import
+from server.grader import MindweaveGrader, clamp_score
 
 # =========================
 # CONFIG 
@@ -19,19 +19,13 @@ IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
 # =========================
 # GRADER INSTANCE
 # =========================
-grader = MindweaveGrader()  # ← grader used in code, validator sees this
+grader = MindweaveGrader()
 
 # =========================
-# TASK PROMPTS
+# TASK PROMPTS - easy → medium → hard
 # =========================
 TASKS = {
-    "emotion_classification": {
-        "prompt": lambda state: (
-            f"The user said: '{state.get('input', '')}'. "
-            f"Classify their core emotion in ONE lowercase word "
-            f"(e.g. neutral, anxious, sad, happy, failure, tired, motivated)."
-        ),
-    },
+    # EASY
     "intent_detection": {
         "prompt": lambda state: (
             f"The user said: '{state.get('input', '')}'. "
@@ -39,6 +33,15 @@ TASKS = {
             f"emotional, question, or statement."
         ),
     },
+    # MEDIUM
+    "emotion_classification": {
+        "prompt": lambda state: (
+            f"The user said: '{state.get('input', '')}'. "
+            f"Classify their core emotion in ONE lowercase word "
+            f"(e.g. neutral, anxious, sad, happy, failure, tired, motivated)."
+        ),
+    },
+    # HARD
     "agent_selection": {
         "prompt": lambda state: (
             f"Mental health state — emotion: {state.get('emotion')}, "
@@ -105,10 +108,10 @@ async def main() -> None:
 
             action_text = await llm_echo(prompt, client)
 
-            # grader scores using state from environment2, not manual input
+            # grader scores using state from environment2
             grader_score = grader.grade({
                 "task_id": task_id,
-                "input": state.get("input", ""),  # ← from environment2 obs.state
+                "input": state.get("input", ""),
                 "action": action_text,
             })
 
@@ -116,7 +119,6 @@ async def main() -> None:
                 MindweaveAction(message=action_text, task=task_id)
             )
 
-            # take max of env reward and grader score
             env_reward = float(result.reward)
             final_reward = clamp_score(max(env_reward, grader_score))
 
