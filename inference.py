@@ -1,5 +1,6 @@
 import os
 import asyncio
+import traceback
 from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
 
@@ -12,11 +13,6 @@ MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
     "LOCAL_IMAGE_NAME",
     "registry.hf.space/akanksha0208-mindweave:latest"
-)
-
-client = AsyncOpenAI(
-    api_key=API_KEY,
-    base_url=API_BASE_URL
 )
 
 # =========================
@@ -51,7 +47,7 @@ TASKS = {
 # =========================
 # LLM CALL
 # =========================
-async def llm_echo(prompt: str) -> str:
+async def llm_echo(prompt: str, client: AsyncOpenAI) -> str:
     try:
         completion = await client.chat.completions.create(
             model=MODEL_NAME,
@@ -70,15 +66,19 @@ async def llm_echo(prompt: str) -> str:
 # =========================
 # MAIN
 # =========================
-async def main():
+async def main() -> None:
     print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
 
-    env = await MindweaveEnv.from_docker_image(
-        IMAGE_NAME,
-        base_url="http://localhost:8000"
-    )
-
     try:
+        # client inside main - matches sample pattern
+        client = AsyncOpenAI(
+            api_key=API_KEY,
+            base_url=API_BASE_URL
+        )
+
+        # no base_url - from_docker_image handles port from YAML app_port
+        env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
+
         result = await env.reset()
         obs = result.observation
         rewards = []
@@ -95,21 +95,14 @@ async def main():
             state = obs.state or {}
             task_id = obs.task
 
-            # build prompt for current task
             task_def = TASKS.get(task_id)
-            if task_def:
-                prompt = task_def["prompt"](state)
-            else:
-                prompt = f"Respond to task: {task_id}"
+            prompt = task_def["prompt"](state) if task_def else f"Respond to task: {task_id}"
 
-            # LLM decides the action
-            action_text = await llm_echo(prompt)
+            action_text = await llm_echo(prompt, client)
 
-            # send to environment2.py step_async via env.step
             result = await env.step(
                 MindweaveAction(message=action_text, task=task_id)
             )
-
             rewards.append(float(result.reward))
             print(
                 f"[STEP] step={step_idx} task={task_id} action={action_text} reward={result.reward:.2f}",
@@ -123,8 +116,13 @@ async def main():
 
     except Exception as e:
         print(f"[END] success=false error={str(e)}", flush=True)
+        traceback.print_exc()  # shows full error in validator log
+
     finally:
-        await env.close()
+        try:
+            await env.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     asyncio.run(main())
