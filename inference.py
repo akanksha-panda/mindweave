@@ -19,7 +19,6 @@ IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
 BENCHMARK = "mindweave"
 MAX_TOKENS = 5
 SUCCESS_SCORE_THRESHOLD = 0.10
-MAX_TOTAL_REWARD = 3 * 0.99  # 3 inputs per task, max 0.99 each
 
 # =========================
 # GRADER INSTANCE
@@ -104,7 +103,9 @@ async def main() -> None:
     client = AsyncOpenAI(api_key=API_KEY, base_url=API_BASE_URL)
     env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
 
-    all_task_scores = {}
+    all_rewards = []
+    step_idx = 1
+    final_score = 0.10
     success = False
 
     try:
@@ -115,16 +116,16 @@ async def main() -> None:
             max_tokens=1
         )
 
-        # run each task separately with all 3 inputs
+        # 3 tasks × 3 inputs = 9 steps
         for task_def in TASK_DEFINITIONS:
             label = task_def["label"]
             task_id = task_def["task_id"]
             task_rewards = []
 
+            # ← task start
             print(f"[START] task={label} env={BENCHMARK} model={MODEL_NAME}", flush=True)
 
-            for step, user_input in enumerate(TEST_INPUTS, 1):
-                # reset env for each input
+            for user_input in TEST_INPUTS:
                 result = await env.reset()
                 obs = result.observation
                 state = obs.state or {}
@@ -145,32 +146,32 @@ async def main() -> None:
                 )
 
                 env_reward = float(result.reward) or 0.10
-                final_reward = clamp_score(max(env_reward, grader_score))
+
+                # clamp BEFORE storing and printing
+                final_reward = max(0.01, min(0.99, float(
+                    clamp_score(max(env_reward, grader_score))
+                )))
+
+                all_rewards.append(final_reward)
                 task_rewards.append(final_reward)
 
                 print(
-                    f"[STEP] task={label} step={step} action={action_text} "
-                    f"env_reward={env_reward:.2f} grader_score={grader_score:.2f} "
-                    f"final={final_reward:.2f}",
+                    f"[STEP] step={step_idx} label={label} action={action_text} score={final_reward:.2f}",
                     flush=True
                 )
+                step_idx += 1
 
-            # avg score for this task
-            task_score = sum(task_rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.10
-            task_score = min(max(task_score, 0.10), 0.99)
-            all_task_scores[label] = task_score
+            # clamp task score BEFORE printing
+            raw_task_score = sum(task_rewards) / len(task_rewards) if task_rewards else 0.10
+            task_score = max(0.01, min(0.99, float(raw_task_score)))
 
+            # ← task end with score
             print(f"[END] task={label} score={task_score:.2f} steps={len(TEST_INPUTS)}", flush=True)
 
-        # final overall score
-        final_score = sum(all_task_scores.values()) / len(all_task_scores) if all_task_scores else 0.10
-        final_score = min(max(final_score, 0.10), 0.99)
+        # clamp final score BEFORE printing
+        raw_score = sum(all_rewards) / len(all_rewards) if all_rewards else 0.10
+        final_score = max(0.01, min(0.99, float(raw_score)))
         success = final_score >= SUCCESS_SCORE_THRESHOLD
-
-        print(f"==== FINAL SCORES ====", flush=True)
-        for label, score in all_task_scores.items():
-            print(f"  {label}: {score:.2f}", flush=True)
-        print(f"  Average: {final_score:.2f}", flush=True)
 
     except Exception as e:
         print(f"[DEBUG] error={str(e)}", flush=True)
@@ -181,8 +182,11 @@ async def main() -> None:
             await env.close()
         except Exception as e:
             print(f"[DEBUG] env.close() error: {e}", flush=True)
+
+        rewards_str = ",".join(f"{r:.2f}" for r in all_rewards)
+        final_score = max(0.01, min(0.99, float(final_score)))
         print(
-            f"[END] success={success} score={final_score:.2f}",
+            f"[END] success={success} steps={step_idx-1} score={final_score:.2f} rewards={rewards_str}",
             flush=True
         )
 
