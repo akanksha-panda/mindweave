@@ -3,6 +3,7 @@ import asyncio
 import traceback
 from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
+from server.grader import MindweaveGrader, compute_task_score, clamp_score  # ← import grader
 
 # =========================
 # CONFIG 
@@ -14,6 +15,11 @@ IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
     "LOCAL_IMAGE_NAME",
     "registry.hf.space/akanksha0208-mindweave:latest"
 )
+
+# =========================
+# GRADER INSTANCE
+# =========================
+grader = MindweaveGrader()
 
 # =========================
 # TASK PROMPTS
@@ -70,13 +76,11 @@ async def main() -> None:
     print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
 
     try:
-        # client inside main - matches sample pattern
         client = AsyncOpenAI(
             api_key=API_KEY,
             base_url=API_BASE_URL
         )
 
-        # no base_url - from_docker_image handles port from YAML app_port
         env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
 
         result = await env.reset()
@@ -100,12 +104,26 @@ async def main() -> None:
 
             action_text = await llm_echo(prompt, client)
 
+            # ← grader scores the action
+            grader_score = grader.grade({
+                "task_id": task_id,
+                "input": state.get("input", ""),
+                "action": action_text,
+            })
+
             result = await env.step(
                 MindweaveAction(message=action_text, task=task_id)
             )
-            rewards.append(float(result.reward))
+
+            # use max of env reward and grader score
+            env_reward = float(result.reward)
+            final_reward = clamp_score(max(env_reward, grader_score))
+
+            rewards.append(final_reward)
             print(
-                f"[STEP] step={step_idx} task={task_id} action={action_text} reward={result.reward:.2f}",
+                f"[STEP] step={step_idx} task={task_id} action={action_text} "
+                f"env_reward={env_reward:.3f} grader_score={grader_score:.3f} "
+                f"final={final_reward:.3f}",
                 flush=True
             )
             obs = result.observation
@@ -116,7 +134,7 @@ async def main() -> None:
 
     except Exception as e:
         print(f"[END] success=false error={str(e)}", flush=True)
-        traceback.print_exc()  # shows full error in validator log
+        traceback.print_exc()
 
     finally:
         try:
