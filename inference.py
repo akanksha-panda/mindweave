@@ -1,6 +1,7 @@
 import os
 import asyncio
 import traceback
+import textwrap
 from openai import AsyncOpenAI
 from client import MindweaveEnv, MindweaveAction
 from server.grader import MindweaveGrader, clamp_score
@@ -15,11 +16,30 @@ IMAGE_NAME = os.getenv("IMAGE_NAME") or os.getenv(
     "LOCAL_IMAGE_NAME",
     "registry.hf.space/akanksha0208-mindweave:latest"
 )
+TASK_NAME = os.getenv("MY_ENV_V4_TASK", "mindweave_eval")
+BENCHMARK = os.getenv("MY_ENV_V4_BENCHMARK", "mindweave")
+MAX_STEPS = 9               # 3 inputs × 3 tasks
+MAX_TOKENS = 5              # we use 1 word only
+SUCCESS_SCORE_THRESHOLD = 0.1
+MAX_TOTAL_REWARD = MAX_STEPS * 1.0  # 1.0 max reward per task step
 
 # =========================
 # GRADER INSTANCE
 # =========================
 grader = MindweaveGrader()
+
+# =========================
+# LOGGING HELPERS
+# =========================
+def log_start(task, env, model):
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+def log_step(step, action, reward, done, error=None):
+    print(f"[STEP] step={step} action={action} reward={reward:+.2f} done={done} error={error}", flush=True)
+
+def log_end(success, steps, score, rewards):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={success} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 
 # =========================
 # TASK PROMPTS - easy → medium → hard
@@ -53,6 +73,12 @@ TASKS = {
     },
 }
 
+SYSTEM_PROMPT = textwrap.dedent("""
+    You are an expert mental health AI agent.
+    You analyze user states and select appropriate responses.
+    Return ONLY one lowercase word. No punctuation, no explanation.
+""").strip()
+
 # =========================
 # LLM CALL
 # =========================
@@ -61,11 +87,11 @@ async def llm_echo(prompt: str, client: AsyncOpenAI) -> str:
         completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "Return ONLY one lowercase word. No punctuation, no explanation."},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
             temperature=0,
-            max_tokens=5,
+            max_tokens=MAX_TOKENS,
         )
         return (completion.choices[0].message.content or "").strip().lower()
     except Exception as e:
@@ -76,20 +102,21 @@ async def llm_echo(prompt: str, client: AsyncOpenAI) -> str:
 # MAIN
 # =========================
 async def main() -> None:
-    print(f"[START] task=mindweave_eval env=mindweave model=env+llm", flush=True)
+    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+
+    client = AsyncOpenAI(api_key=API_KEY, base_url=API_BASE_URL)
+    env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
+
+    history = []
+    rewards = []
+    steps_taken = 0
+    score = 0.0
+    success = False
 
     try:
-        client = AsyncOpenAI(
-            api_key=API_KEY,
-            base_url=API_BASE_URL
-        )
-
-        env = await MindweaveEnv.from_docker_image(IMAGE_NAME)
-
         result = await env.reset()
         obs = result.observation
-        rewards = []
-        step_idx = 1
+        last_reward = 0.0
 
         # guaranteed LLM API call
         await client.chat.completions.create(
@@ -98,15 +125,18 @@ async def main() -> None:
             max_tokens=1
         )
 
-        while not result.done:
-            # state comes from environment2.py step_async
+        for step in range(1, MAX_STEPS + 1):
+            if result.done:
+                break
+
             state = obs.state or {}
             task_id = obs.task
+            error = None
 
-            task_def = TASKS.get(task_id)
-            prompt = task_def["prompt"](state) if task_def else f"Respond to task: {task_id}"
-
-            action_text = await llm_echo(prompt, client)
+            action_text = await llm_echo(
+                TASKS[task_id]["prompt"](state) if task_id in TASKS else f"Respond to task: {task_id}",
+                client
+            )
 
             # grader scores using state from environment2
             grader_score = grader.grade({
@@ -118,32 +148,37 @@ async def main() -> None:
             result = await env.step(
                 MindweaveAction(message=action_text, task=task_id)
             )
+            obs = result.observation
 
-            env_reward = float(result.reward)
+            env_reward = float(result.reward) or 0.0
             final_reward = clamp_score(max(env_reward, grader_score))
 
             rewards.append(final_reward)
-            print(
-                f"[STEP] step={step_idx} task={task_id} action={action_text} "
-                f"env_reward={env_reward:.3f} grader_score={grader_score:.3f} "
-                f"final={final_reward:.3f}",
-                flush=True
-            )
-            obs = result.observation
-            step_idx += 1
+            steps_taken = step
+            last_reward = final_reward
 
-        score = sum(rewards) / len(rewards) if rewards else 0.0
-        print(f"[END] success=true score={score:.2f}", flush=True)
+            log_step(step=step, action=action_text, reward=final_reward, done=result.done, error=error)
+            history.append(f"Step {step}: {action_text!r} → reward {final_reward:+.2f}")
+
+            if result.done:
+                break
+
+        # matches sample scoring pattern
+        score = sum(rewards) / MAX_TOTAL_REWARD if MAX_TOTAL_REWARD > 0 else 0.0
+        score = min(max(score, 0.0), 1.0)
+        success = score >= SUCCESS_SCORE_THRESHOLD
 
     except Exception as e:
-        print(f"[END] success=false error={str(e)}", flush=True)
+        error = str(e)
+        print(f"[DEBUG] error={error}", flush=True)
         traceback.print_exc()
 
     finally:
         try:
             await env.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"[DEBUG] env.close() error (container cleanup): {e}", flush=True)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 if __name__ == "__main__":
     asyncio.run(main())
